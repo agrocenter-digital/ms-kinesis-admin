@@ -35,10 +35,15 @@ class Security {
                              @Value("${COGNITO_AUDIENCE:}") String audience) {
         if (issuer.isBlank() || jwks.isBlank() || audience.isBlank()) throw new IllegalStateException("Configuración Cognito requerida");
         var decoder = NimbusJwtDecoder.withJwkSetUri(jwks).jwsAlgorithm(SignatureAlgorithm.RS256).build();
-        OAuth2TokenValidator<Jwt> access = jwt -> "access".equals(jwt.getClaimAsString("token_use"))
-            && (audience.equals(jwt.getClaimAsString("client_id")) || jwt.getAudience().contains(audience))
-            ? OAuth2TokenValidatorResult.success() : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token"));
+        OAuth2TokenValidator<Jwt> access = jwt -> validateAccess(jwt, audience);
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(issuer), access));
         return decoder;
+    }
+    static OAuth2TokenValidatorResult validateAccess(Jwt jwt, String audience) {
+        var tokenAudience = jwt.getAudience();
+        boolean clientMatches = audience.equals(jwt.getClaimAsString("client_id"));
+        boolean audienceMatches = tokenAudience != null && tokenAudience.contains(audience);
+        return "access".equals(jwt.getClaimAsString("token_use")) && (clientMatches || audienceMatches)
+            ? OAuth2TokenValidatorResult.success() : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token"));
     }
 }
